@@ -139,74 +139,6 @@ def detect_scenes_and_timestamps(video_path, threshold=0.3):
     return scenes
 
 
-def refine_long_scenes(scenes, video_path, long_scene_threshold=15.0, sample_interval=2.0, min_trigger_gap=4.0):
-    """
-    Refines long scenes by adding internal trigger points.
-
-    Args:
-        scenes (list): List of scene dictionaries from detect_scenes_and_timestamps.
-        video_path (str): Path to the input video file (to get FPS).
-        long_scene_threshold (float, optional): Minimum duration (seconds) for a scene to be considered 'long'. Defaults to 15.0.
-        sample_interval (float, optional): Interval (seconds) to sample points within long scenes. Defaults to 2.0.
-        min_trigger_gap (float, optional): Minimum gap (seconds) between any two triggers. Defaults to 4.0.
-
-    Returns:
-        list: A refined list of trigger points (dictionaries with 'timestamp' and 'type').
-    """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"Error: Could not open video file {video_path} for refinement.")
-        return []
-    video_fps = cap.get(cv2.CAP_PROP_FPS)
-    cap.release()
-
-    refined_triggers = []
-    
-    for scene in scenes:
-        start_ts = scene['start_timestamp']
-        end_ts = scene['end_timestamp']
-        duration = end_ts - start_ts
-        
-        # Add the original scene start as a trigger
-        refined_triggers.append({
-            "timestamp": start_ts,
-            "type": "scene_start"
-        })
-        
-        # Check if the scene is long enough to be refined
-        if duration >= long_scene_threshold:
-            print(f"Refining long scene from {start_ts:.2f}s to {end_ts:.2f}s (Duration: {duration:.2f}s)")
-            # Generate internal sample points
-            # Start sampling after the initial trigger and stop before the end
-            current_sample_ts = start_ts + sample_interval
-            while current_sample_ts < end_ts:
-                refined_triggers.append({
-                    "timestamp": current_sample_ts,
-                    "type": "internal_sample"
-                })
-                current_sample_ts += sample_interval
-                # Add a small epsilon to avoid floating point precision issues
-                if current_sample_ts >= end_ts - 1e-6:
-                    break
-    
-    # Sort all triggers by timestamp
-    refined_triggers.sort(key=lambda x: x['timestamp'])
-    
-    # Apply minimum trigger gap filter
-    filtered_triggers = []
-    last_trigger_time = -min_trigger_gap # Initialize to allow the first trigger
-    
-    for trigger in refined_triggers:
-        if trigger['timestamp'] - last_trigger_time >= min_trigger_gap:
-            filtered_triggers.append(trigger)
-            last_trigger_time = trigger['timestamp']
-        else:
-            print(f"Filtered out trigger at {trigger['timestamp']:.2f}s (too close to previous)")
-            
-    print(f"Refined triggers: {len(refined_triggers)} -> {len(filtered_triggers)} after filtering.")
-    return filtered_triggers
-
-
 def save_scenes_to_json(scenes, output_file):
     """
     Saves the list of scenes with timestamps to a JSON file.
@@ -220,19 +152,6 @@ def save_scenes_to_json(scenes, output_file):
     print(f"Scenes saved to {output_file}")
 
 
-def save_triggers_to_json(triggers, output_file):
-    """
-    Saves the list of triggers to a JSON file.
-
-    Args:
-        triggers (list): List of trigger dictionaries.
-        output_file (str): Path to the output JSON file.
-    """
-    with open(output_file, 'w') as f:
-        json.dump(triggers, f, indent=4)
-    print(f"Triggers saved to {output_file}")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Video to Annotation Tool")
     parser.add_argument("--extract-frames", type=str, help="Path to the input video file for frame extraction")
@@ -242,14 +161,6 @@ def main():
     parser.add_argument("--detect-scenes", type=str, help="Path to the input video file for scene detection")
     parser.add_argument("--threshold", type=float, default=0.3, help="Threshold for scene change detection (default: 0.3)")
     parser.add_argument("--scene-output", type=str, help="Output JSON file for scenes (default: ./scenes.json)")
-
-    # Arguments for long scene refinement
-    parser.add_argument("--refine-long-scenes", type=str, help="Path to the input video file for long scene refinement")
-    parser.add_argument("--scenes-json", type=str, help="Path to the JSON file containing detected scenes")
-    parser.add_argument("--long-scene-threshold", type=float, default=15.0, help="Threshold for long scenes in seconds (default: 15.0)")
-    parser.add_argument("--sample-interval", type=float, default=2.0, help="Sampling interval within long scenes (default: 2.0)")
-    parser.add_argument("--min-trigger-gap", type=float, default=4.0, help="Minimum gap between triggers (default: 4.0)")
-    parser.add_argument("--triggers-output", type=str, help="Output JSON file for refined triggers (default: ./triggers.json)")
 
     args = parser.parse_args()
 
@@ -262,33 +173,8 @@ def main():
         scenes = detect_scenes_and_timestamps(video_path, args.threshold)
         output_file = args.scene_output if args.scene_output else "./scenes.json"
         save_scenes_to_json(scenes, output_file)
-    elif args.refine_long_scenes:
-        video_path = args.refine_long_scenes
-        if not args.scenes_json:
-            print("Error: --scenes-json is required for long scene refinement.")
-            return
-        
-        try:
-            with open(args.scenes_json, 'r') as f:
-                scenes = json.load(f)
-        except FileNotFoundError:
-            print(f"Error: Could not find scenes file {args.scenes_json}")
-            return
-        except json.JSONDecodeError:
-            print(f"Error: Could not decode JSON from {args.scenes_json}")
-            return
-            
-        refined_triggers = refine_long_scenes(
-            scenes, video_path,
-            long_scene_threshold=args.long_scene_threshold,
-            sample_interval=args.sample_interval,
-            min_trigger_gap=args.min_trigger_gap
-        )
-        
-        output_file = args.triggers_output if args.triggers_output else "./triggers.json"
-        save_triggers_to_json(refined_triggers, output_file)
     else:
-        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, or --refine-long-scenes.")
+        print("This is a placeholder for the main script. Use --extract-frames or --detect-scenes.")
 
 if __name__ == "__main__":
     main()
