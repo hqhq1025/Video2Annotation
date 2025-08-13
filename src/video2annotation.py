@@ -139,6 +139,78 @@ def detect_scenes_and_timestamps(video_path, threshold=0.3):
     return scenes
 
 
+def merge_short_scenes(scenes, min_duration=2.0):
+    """
+    Merges scenes that are shorter than min_duration into adjacent scenes.
+
+    Args:
+        scenes (list): List of scene dictionaries.
+        min_duration (float, optional): Minimum duration for a scene in seconds. Defaults to 2.0.
+
+    Returns:
+        list: The list of scenes after merging short ones.
+    """
+    if len(scenes) <= 1:
+        return scenes
+
+    # Work on a copy to avoid modifying the original list during iteration
+    merged_scenes = scenes.copy()
+    i = 0
+    while i < len(merged_scenes):
+        scene = merged_scenes[i]
+        duration = scene['end_timestamp'] - scene['start_timestamp']
+        
+        # Check if current scene is too short
+        if duration < min_duration:
+            print(f"Scene starting at {scene['start_timestamp']:.2f}s is short (Duration: {duration:.2f}s). Merging...")
+            
+            # Case 1: First scene
+            if i == 0:
+                # Merge into the next scene
+                if i + 1 < len(merged_scenes):
+                    merged_scenes[i + 1]['start_timestamp'] = scene['start_timestamp']
+                    merged_scenes[i + 1]['start_frame'] = scene['start_frame']
+                    print(f"  Merged into next scene (now starts at {merged_scenes[i + 1]['start_timestamp']:.2f}s).")
+                    merged_scenes.pop(i) # Remove current scene
+                    # Do not increment i, as the next scene has shifted to index i
+                    continue 
+                else:
+                    # Only one scene, nothing to merge with. This case should not happen due to len>1 check.
+                    pass
+            
+            # Case 2: Last scene
+            elif i == len(merged_scenes) - 1:
+                # Merge into the previous scene
+                if i - 1 >= 0:
+                    merged_scenes[i - 1]['end_timestamp'] = scene['end_timestamp']
+                    print(f"  Merged into previous scene (now ends at {merged_scenes[i - 1]['end_timestamp']:.2f}s).")
+                    merged_scenes.pop(i) # Remove current scene
+                    # Do not increment i, as we need to check the new scene at this index
+                    continue
+            
+            # Case 3: Middle scene
+            else:
+                # Merge into the next scene (or previous, but next is simpler)
+                if i + 1 < len(merged_scenes):
+                    merged_scenes[i + 1]['start_timestamp'] = scene['start_timestamp']
+                    merged_scenes[i + 1]['start_frame'] = scene['start_frame']
+                    print(f"  Merged into next scene (now starts at {merged_scenes[i + 1]['start_timestamp']:.2f}s).")
+                    merged_scenes.pop(i) # Remove current scene
+                    # Do not increment i
+                    continue
+                # This else clause is a fallback, though unlikely to be reached if i+1 < len
+                # elif i - 1 >= 0:
+                #     merged_scenes[i - 1]['end_timestamp'] = scene['end_timestamp']
+                #     merged_scenes.pop(i)
+                #     continue
+            
+        # If scene was not merged, or was the last scene and not short, move to next
+        i += 1
+        
+    print(f"Merged short scenes. Original: {len(scenes)}, Final: {len(merged_scenes)}")
+    return merged_scenes
+
+
 def save_scenes_to_json(scenes, output_file):
     """
     Saves the list of scenes with timestamps to a JSON file.
@@ -161,6 +233,7 @@ def main():
     parser.add_argument("--detect-scenes", type=str, help="Path to the input video file for scene detection")
     parser.add_argument("--threshold", type=float, default=0.3, help="Threshold for scene change detection (default: 0.3)")
     parser.add_argument("--scene-output", type=str, help="Output JSON file for scenes (default: ./scenes.json)")
+    parser.add_argument("--min-scene-duration", type=float, default=2.0, help="Minimum duration (seconds) for a scene (default: 2.0)")
 
     args = parser.parse_args()
 
@@ -171,6 +244,8 @@ def main():
     elif args.detect_scenes:
         video_path = args.detect_scenes
         scenes = detect_scenes_and_timestamps(video_path, args.threshold)
+        # Apply post-processing to merge short scenes
+        scenes = merge_short_scenes(scenes, args.min_scene_duration)
         output_file = args.scene_output if args.scene_output else "./scenes.json"
         save_scenes_to_json(scenes, output_file)
     else:
