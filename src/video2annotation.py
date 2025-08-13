@@ -211,6 +211,53 @@ def merge_short_scenes(scenes, min_duration=2.0):
     return merged_scenes
 
 
+def find_keyframe_for_scenes(scenes_file, frames_dir):
+    """
+    Finds the keyframe path for each scene based on its start timestamp.
+    Assumes frames are named frame_00000.jpg, frame_00001.jpg, etc., 
+    corresponding to 1 frame per second.
+
+    Args:
+        scenes_file (str): Path to the JSON file containing scene data.
+        frames_dir (str): Path to the directory containing extracted frames.
+
+    Returns:
+        list: A list of dictionaries, each containing scene info and 'keyframe_path'.
+    """
+    try:
+        with open(scenes_file, 'r') as f:
+            scenes = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: Could not find scenes file {scenes_file}")
+        return []
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from {scenes_file}")
+        return []
+
+    annotated_scenes = []
+    for scene in scenes:
+        start_ts = scene['start_timestamp']
+        # Find the frame index corresponding to the start timestamp
+        # Assuming 1 frame per second, the index is the integer part of the timestamp
+        frame_index = int(start_ts) # This effectively floors the timestamp
+        
+        # Construct the expected frame filename
+        frame_filename = f"frame_{frame_index:05d}.jpg"
+        frame_path = os.path.join(frames_dir, frame_filename)
+        
+        # Check if the frame file actually exists
+        if not os.path.exists(frame_path):
+            print(f"Warning: Keyframe {frame_path} for scene starting at {start_ts:.2f}s not found.")
+            frame_path = None # Or handle the error as appropriate
+            
+        # Add the keyframe path to the scene data
+        annotated_scene = scene.copy()
+        annotated_scene['keyframe_path'] = frame_path
+        annotated_scenes.append(annotated_scene)
+        
+    return annotated_scenes
+
+
 def save_scenes_to_json(scenes, output_file):
     """
     Saves the list of scenes with timestamps to a JSON file.
@@ -235,6 +282,11 @@ def main():
     parser.add_argument("--scene-output", type=str, help="Output JSON file for scenes (default: ./scenes.json)")
     parser.add_argument("--min-scene-duration", type=float, default=2.0, help="Minimum duration (seconds) for a scene (default: 2.0)")
 
+    # Argument for finding keyframes
+    parser.add_argument("--find-keyframes", type=str, help="Path to the JSON file containing scene data for keyframe lookup")
+    parser.add_argument("--frames-dir", type=str, help="Path to the directory containing extracted frames")
+    parser.add_argument("--keyframe-output", type=str, help="Output JSON file with keyframe paths (default: ./scenes_with_keyframes.json)")
+
     args = parser.parse_args()
 
     if args.extract_frames:
@@ -248,8 +300,16 @@ def main():
         scenes = merge_short_scenes(scenes, args.min_scene_duration)
         output_file = args.scene_output if args.scene_output else "./scenes.json"
         save_scenes_to_json(scenes, output_file)
+    elif args.find_keyframes:
+        if not args.frames_dir:
+            print("Error: --frames-dir is required for --find-keyframes.")
+            return
+        scenes_with_keyframes = find_keyframe_for_scenes(args.find_keyframes, args.frames_dir)
+        output_file = args.keyframe_output if args.keyframe_output else "./scenes_with_keyframes.json"
+        save_scenes_to_json(scenes_with_keyframes, output_file)
+        print(f"Keyframe paths added to scenes. Output saved to {output_file}")
     else:
-        print("This is a placeholder for the main script. Use --extract-frames or --detect-scenes.")
+        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, or --find-keyframes.")
 
 if __name__ == "__main__":
     main()
