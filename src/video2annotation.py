@@ -4,6 +4,9 @@ import argparse
 import json
 import numpy as np
 
+# Import the QwenVL client function
+from qwenvl_client import get_qwenvl_caption
+
 def extract_frames(video_path, output_dir, fps=1):
     """
     Extracts frames from a video at a specified frame rate.
@@ -287,6 +290,11 @@ def main():
     parser.add_argument("--frames-dir", type=str, help="Path to the directory containing extracted frames")
     parser.add_argument("--keyframe-output", type=str, help="Output JSON file with keyframe paths (default: ./scenes_with_keyframes.json)")
 
+    # Argument for generating QwenVL captions
+    parser.add_argument("--generate-captions", type=str, help="Path to the JSON file containing scenes with keyframe paths")
+    parser.add_argument("--captions-output", type=str, help="Output JSON file with QwenVL captions (default: ./scenes_with_captions.json)")
+    parser.add_argument("--caption-prompt", type=str, default="Describe this image in detail.", help="Prompt to use for QwenVL captioning (default: 'Describe this image in detail.')")
+
     args = parser.parse_args()
 
     if args.extract_frames:
@@ -308,8 +316,35 @@ def main():
         output_file = args.keyframe_output if args.keyframe_output else "./scenes_with_keyframes.json"
         save_scenes_to_json(scenes_with_keyframes, output_file)
         print(f"Keyframe paths added to scenes. Output saved to {output_file}")
+    elif args.generate_captions:
+        try:
+            with open(args.generate_captions, 'r') as f:
+                scenes = json.load(f)
+        except FileNotFoundError:
+            print(f"Error: Could not find scenes file {args.generate_captions}")
+            return
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from {args.generate_captions}")
+            return
+
+        print(f"Generating captions for {len(scenes)} scenes using QwenVL...")
+        for i, scene in enumerate(scenes):
+            keyframe_path = scene.get('keyframe_path')
+            if not keyframe_path or not os.path.exists(keyframe_path):
+                print(f"Skipping scene {i+1}: Keyframe not found at {keyframe_path}")
+                scene['caption'] = None
+                continue
+
+            print(f"Processing scene {i+1}/{len(scenes)}: {keyframe_path}")
+            caption = get_qwenvl_caption(keyframe_path, args.caption_prompt)
+            scene['caption'] = caption
+        
+        output_file = args.captions_output if args.captions_output else "./scenes_with_captions.json"
+        save_scenes_to_json(scenes, output_file)
+        print(f"Captions generated and saved to {output_file}")
+
     else:
-        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, or --find-keyframes.")
+        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, --find-keyframes, or --generate-captions.")
 
 if __name__ == "__main__":
     main()
