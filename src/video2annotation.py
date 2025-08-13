@@ -216,9 +216,9 @@ def merge_short_scenes(scenes, min_duration=2.0):
     return merged_scenes
 
 
-def find_keyframe_for_scenes(scenes_file, frames_dir):
+def find_keyframes_for_scenes(scenes_file, frames_dir):
     """
-    Finds the keyframe path for each scene based on its start timestamp.
+    Finds all keyframe paths for each scene based on its start and end timestamps.
     Assumes frames are named frame_00000.jpg, frame_00001.jpg, etc., 
     corresponding to 1 frame per second.
 
@@ -227,7 +227,7 @@ def find_keyframe_for_scenes(scenes_file, frames_dir):
         frames_dir (str): Path to the directory containing extracted frames.
 
     Returns:
-        list: A list of dictionaries, each containing scene info and 'keyframe_path'.
+        list: A list of dictionaries, each containing scene info and 'keyframe_paths'.
     """
     try:
         with open(scenes_file, 'r') as f:
@@ -242,23 +242,29 @@ def find_keyframe_for_scenes(scenes_file, frames_dir):
     annotated_scenes = []
     for scene in scenes:
         start_ts = scene['start_timestamp']
-        # Find the frame index corresponding to the start timestamp
+        end_ts = scene['end_timestamp']
+        
+        # Find the frame index range corresponding to the scene timestamps
         # Assuming 1 frame per second, the index is the integer part of the timestamp
-        frame_index = int(start_ts) # This effectively floors the timestamp
+        start_frame_index = int(start_ts)
+        end_frame_index = int(end_ts)
         
-        # Construct the expected frame filename
-        frame_filename = f"frame_{frame_index:05d}.jpg"
-        frame_path = os.path.join(frames_dir, frame_filename)
-        
-        # Check if the frame file actually exists
-        if not os.path.exists(frame_path):
-            print(f"Warning: Keyframe {frame_path} for scene starting at {start_ts:.2f}s not found.")
-            frame_path = None # Or handle the error as appropriate
+        # Collect all frame paths within this range (inclusive)
+        keyframe_paths = []
+        for i in range(start_frame_index, end_frame_index + 1):
+            frame_filename = f"frame_{i:05d}.jpg"
+            frame_path = os.path.join(frames_dir, frame_filename)
+            # Check if the frame file actually exists before adding
+            if os.path.exists(frame_path):
+                keyframe_paths.append(frame_path)
+            # else:
+            #     print(f"Warning: Expected frame {frame_path} not found.")
             
-        # Add the keyframe path to the scene data
+        # Add the keyframe paths to the scene data
         annotated_scene = scene.copy()
-        annotated_scene['keyframe_path'] = frame_path
+        annotated_scene['keyframe_paths'] = keyframe_paths
         annotated_scenes.append(annotated_scene)
+        print(f"Scene ({start_ts:.2f}s - {end_ts:.2f}s): Found {len(keyframe_paths)} keyframes.")
         
     return annotated_scenes
 
@@ -299,19 +305,18 @@ def main():
     parser.add_argument("--scene-output", type=str, help="Output JSON file for scenes (default: ./scenes.json)")
     parser.add_argument("--min-scene-duration", type=float, default=2.0, help="Minimum duration (seconds) for a scene (default: 2.0)")
 
-    # Argument for finding keyframes
-    parser.add_argument("--find-keyframes", type=str, help="Path to the JSON file containing scene data for keyframe lookup")
+    # Argument for finding keyframes (ALL keyframes for each scene)
+    parser.add_argument("--find-all-keyframes", type=str, help="Path to the JSON file containing scene data for keyframe lookup")
     parser.add_argument("--frames-dir", type=str, help="Path to the directory containing extracted frames")
-    parser.add_argument("--keyframe-output", type=str, help="Output JSON file with keyframe paths (default: ./scenes_with_keyframes.json)")
+    parser.add_argument("--all-keyframes-output", type=str, help="Output JSON file with ALL keyframe paths for each scene (default: ./scenes_with_all_keyframes.json)")
 
     # Argument for generating QwenVL captions
-    parser.add_argument("--generate-captions", type=str, help="Path to the JSON file containing scenes with keyframe paths")
-    parser.add_argument("--captions-output", type=str, help="Output JSON file with QwenVL captions (default: ./scenes_with_captions.json)")
+    parser.add_argument("--generate-captions", type=str, help="Path to the JSON file containing scenes with ALL keyframe paths")
     parser.add_argument("--frame-captions-output", type=str, help="Output JSON file with frame path to caption mapping (default: ./frame_captions.json)")
     parser.add_argument("--caption-prompt", type=str, default="Describe this image in detail.", help="Prompt to use for QwenVL captioning (default: 'Describe this image in detail.')")
 
     # Argument for summarizing scenes using a text model
-    parser.add_argument("--summarize-scenes", type=str, help="Path to the JSON file containing scenes with keyframe paths")
+    parser.add_argument("--summarize-scenes", type=str, help="Path to the JSON file containing scenes with ALL keyframe paths")
     parser.add_argument("--frame-captions", type=str, help="Path to the JSON file containing frame path to caption mapping")
     parser.add_argument("--summary-output", type=str, help="Output JSON file with summarized scenes (default: ./scenes_with_summaries.json)")
     parser.add_argument("--summary-prompt", type=str, help="Custom prompt for the text summarization model")
@@ -329,14 +334,14 @@ def main():
         scenes = merge_short_scenes(scenes, args.min_scene_duration)
         output_file = args.scene_output if args.scene_output else "./scenes.json"
         save_scenes_to_json(scenes, output_file)
-    elif args.find_keyframes:
+    elif args.find_all_keyframes:
         if not args.frames_dir:
-            print("Error: --frames-dir is required for --find-keyframes.")
+            print("Error: --frames-dir is required for --find-all-keyframes.")
             return
-        scenes_with_keyframes = find_keyframe_for_scenes(args.find_keyframes, args.frames_dir)
-        output_file = args.keyframe_output if args.keyframe_output else "./scenes_with_keyframes.json"
-        save_scenes_to_json(scenes_with_keyframes, output_file)
-        print(f"Keyframe paths added to scenes. Output saved to {output_file}")
+        scenes_with_all_keyframes = find_keyframes_for_scenes(args.find_all_keyframes, args.frames_dir)
+        output_file = args.all_keyframes_output if args.all_keyframes_output else "./scenes_with_all_keyframes.json"
+        save_scenes_to_json(scenes_with_all_keyframes, output_file)
+        print(f"All keyframe paths added to scenes. Output saved to {output_file}")
     elif args.generate_captions:
         if not args.frame_captions_output:
              args.frame_captions_output = "./frame_captions.json"
@@ -351,36 +356,35 @@ def main():
             print(f"Error: Could not decode JSON from {args.generate_captions}")
             return
 
-        print(f"Generating captions for {len(scenes)} scenes using QwenVL...")
+        print(f"Generating captions for all keyframes in {len(scenes)} scenes using QwenVL...")
         frame_captions_dict = {}
-        scenes_with_captions = []
-        for i, scene in enumerate(scenes):
-            keyframe_path = scene.get('keyframe_path')
-            if not keyframe_path or not os.path.exists(keyframe_path):
-                print(f"Skipping scene {i+1}: Keyframe not found at {keyframe_path}")
-                scene['caption'] = None
-                scenes_with_captions.append(scene)
+        
+        # 1. Collect ALL unique frame paths from all scenes
+        all_unique_frame_paths = set()
+        for scene in scenes:
+            keyframe_paths = scene.get('keyframe_paths', [])
+            all_unique_frame_paths.update(keyframe_paths)
+        
+        total_frames = len(all_unique_frame_paths)
+        print(f"Found {total_frames} unique frames to process.")
+        
+        # 2. Generate captions for each unique frame
+        for i, frame_path in enumerate(sorted(list(all_unique_frame_paths))):
+            if not os.path.exists(frame_path):
+                print(f"Warning: Frame not found at {frame_path}, skipping.")
                 continue
 
-            print(f"Processing scene {i+1}/{len(scenes)}: {keyframe_path}")
-            caption = get_qwenvl_caption(keyframe_path, args.caption_prompt)
+            print(f"Processing frame {i+1}/{total_frames}: {frame_path}")
+            caption = get_qwenvl_caption(frame_path, args.caption_prompt)
             
-            # 1. Populate the frame_captions_dict
-            frame_captions_dict[keyframe_path] = caption
-            
-            # 2. Add caption to the scene object for the legacy output
-            scene_with_caption = scene.copy()
-            scene_with_caption['caption'] = caption
-            scenes_with_captions.append(scene_with_caption)
+            # Populate the frame_captions_dict
+            if caption is not None:
+                frame_captions_dict[frame_path] = caption
+            # else: log or handle error
         
-        # Save the frame-level captions
+        # 3. Save the frame-level captions
         save_frame_captions_to_json(frame_captions_dict, args.frame_captions_output)
         print(f"Frame-level captions saved to {args.frame_captions_output}")
-        
-        # Save the legacy scene-level file with captions
-        output_file = args.captions_output if args.captions_output else "./scenes_with_captions.json"
-        save_scenes_to_json(scenes_with_captions, output_file)
-        print(f"(Legacy) Scenes with captions saved to {output_file}")
 
     elif args.summarize_scenes:
         if not args.frame_captions:
@@ -408,26 +412,28 @@ def main():
 
         print(f"Summarizing captions for {len(scenes)} scenes using Qwen Text Model...")
         for i, scene in enumerate(scenes):
-            # Get the list of captions for this scene.
-            # For now, we assume it's a single 'keyframe_path'.
-            # In the future, this could be a list of 'keyframe_paths'.
-            keyframe_path = scene.get('keyframe_path')
-            if not keyframe_path:
-                print(f"Skipping scene {i+1}: No keyframe path found.")
+            # Get the list of keyframe paths for this scene
+            keyframe_paths = scene.get('keyframe_paths', [])
+            if not keyframe_paths:
+                print(f"Skipping scene {i+1}: No keyframe paths found.")
                 scene['summary'] = None
                 continue
 
-            # Get the caption for the keyframe from the frame_captions_dict
-            original_caption = frame_captions_dict.get(keyframe_path)
-            if not original_caption:
-                print(f"Skipping scene {i+1}: No caption found for keyframe {keyframe_path}.")
-                scene['summary'] = None
-                continue
-
-            # Wrap the single caption in a list to match the expected input format
-            captions_list = [original_caption]
+            # Get the captions for all keyframes from the frame_captions_dict
+            captions_list = []
+            for kf_path in keyframe_paths:
+                cap = frame_captions_dict.get(kf_path)
+                if cap:
+                    captions_list.append(cap)
+                # else: 
+                #     print(f"Warning: No caption found for keyframe {kf_path} in scene {i+1}")
             
-            print(f"Processing scene {i+1}/{len(scenes)}...")
+            if not captions_list:
+                print(f"Skipping scene {i+1}: No captions found for any keyframes.")
+                scene['summary'] = None
+                continue
+            
+            print(f"Processing scene {i+1}/{len(scenes)} with {len(captions_list)} captions...")
             summary = get_qwen_text_summary(captions_list, args.summary_prompt)
             scene['summary'] = summary
         
@@ -435,7 +441,7 @@ def main():
         save_scenes_to_json(scenes, output_file)
         print(f"Scene summaries generated and saved to {output_file}")
     else:
-        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, --find-keyframes, --generate-captions, or --summarize-scenes.")
+        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, --find-all-keyframes, --generate-captions, or --summarize-scenes.")
 
 if __name__ == "__main__":
     main()

@@ -26,35 +26,37 @@ def get_qwen_text_summary(captions_list, custom_prompt=None):
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
-    # Default prompt if none is provided
+    # Default prompt if none is provided, optimized for narrative scene description
     if not custom_prompt:
         custom_prompt = """
-You are an AI assistant tasked with creating a comprehensive summary of a video scene.
-You will be given one or more detailed descriptions of keyframes from that scene.
-Your goal is to synthesize these descriptions into a single, coherent, and detailed paragraph that accurately represents the entire scene.
+You are a talented storyteller and screenwriter. Your task is to create a **coherent, vivid, and engaging narrative** that describes a short video scene.
 
-Instructions:
-1.  Carefully read all the provided keyframe descriptions.
-2.  Identify the core setting, main subjects, and key actions or events.
-3.  If there are multiple descriptions, look for how the scene evolves or what different perspectives they offer.
-4.  Combine the information to form a unified narrative of the scene.
-5.  Be detailed and descriptive, but avoid simply concatenating the input texts.
-6.  The summary should read as if it describes the scene as a whole, not as a collection of separate images.
+You will be given a sequence of detailed descriptions. Each description corresponds to a keyframe from the same continuous video clip. Your goal is to synthesize these descriptions into a **single, flowing paragraph** that tells the story of what happens in the entire scene, as if you were describing it to someone who hasn't seen the video.
 
-Keyframe Description(s):
+**Instructions:**
+1.  **Read all descriptions carefully.** They depict different moments from the same scene.
+2.  **Identify the core setting, characters, actions, and mood.** What is the environment? Who or what is present? What are they doing? How does the scene feel (e.g., tense, joyful, mysterious)?
+3.  **Craft a narrative.** Instead of listing details from each frame, weave them into a chronological and logical flow. Use transitional language (e.g., "then," "suddenly," "meanwhile," "as time passes") to connect moments if needed, but avoid being overly mechanical.
+4.  **Prioritize coherence and storytelling.** The summary should read like a short story excerpt or a film critic's description of a scene. It should have a clear beginning, middle, and sense of progression or culmination.
+5.  **Be descriptive and vivid.** Use evocative language to paint a picture, but keep it concise and focused.
+6.  **Avoid Repetition.** Do not simply repeat information from every frame description. Synthesize and prioritize the most important elements for the overall narrative.
+
+**Goal:** Create a summary so vivid and well-structured that it allows the reader to clearly visualize and understand the essence of the video scene.
+
+**Keyframe Descriptions:**
 """
 
     # Build the full prompt by appending the captions
     full_prompt = custom_prompt + "\n"
     for i, caption in enumerate(captions_list):
-        full_prompt += f"--- Description {i+1} ---\n{caption}\n\n"
+        full_prompt += f"--- Frame {i+1} Description ---\n{caption}\n\n"
 
     try:
         print(f"Calling {QWEN_TEXT_MODEL} to summarize {len(captions_list)} caption(s)...")
         completion = client.chat.completions.create(
             model=QWEN_TEXT_MODEL,
             messages=[
-                {'role': 'system', 'content': 'You are a helpful assistant.'},
+                {'role': 'system', 'content': 'You are a helpful assistant and a skilled creative writer.'},
                 {'role': 'user', 'content': full_prompt}
             ],
             temperature=0.7 # Moderate temperature for balanced creativity and relevance
