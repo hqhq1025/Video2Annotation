@@ -6,6 +6,8 @@ import numpy as np
 
 # Import the QwenVL client function
 from qwenvl_client import get_qwenvl_caption
+# Import the text summary client function
+from text_summary_client import get_qwen_text_summary
 
 def extract_frames(video_path, output_dir, fps=1):
     """
@@ -295,6 +297,11 @@ def main():
     parser.add_argument("--captions-output", type=str, help="Output JSON file with QwenVL captions (default: ./scenes_with_captions.json)")
     parser.add_argument("--caption-prompt", type=str, default="Describe this image in detail.", help="Prompt to use for QwenVL captioning (default: 'Describe this image in detail.')")
 
+    # Argument for summarizing scenes using a text model
+    parser.add_argument("--summarize-scenes", type=str, help="Path to the JSON file containing scenes with captions to be summarized")
+    parser.add_argument("--summary-output", type=str, help="Output JSON file with summarized scenes (default: ./scenes_with_summaries.json)")
+    parser.add_argument("--summary-prompt", type=str, help="Custom prompt for the text summarization model")
+
     args = parser.parse_args()
 
     if args.extract_frames:
@@ -342,9 +349,40 @@ def main():
         output_file = args.captions_output if args.captions_output else "./scenes_with_captions.json"
         save_scenes_to_json(scenes, output_file)
         print(f"Captions generated and saved to {output_file}")
+    elif args.summarize_scenes:
+        try:
+            with open(args.summarize_scenes, 'r') as f:
+                scenes = json.load(f)
+        except FileNotFoundError:
+            print(f"Error: Could not find scenes file {args.summarize_scenes}")
+            return
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from {args.summarize_scenes}")
+            return
 
+        print(f"Summarizing captions for {len(scenes)} scenes using Qwen Text Model...")
+        for i, scene in enumerate(scenes):
+            # Get the list of captions for this scene.
+            # For now, we assume it's a single 'caption' field.
+            # In the future, this could be a list of 'captions'.
+            original_caption = scene.get('caption')
+            if not original_caption:
+                print(f"Skipping scene {i+1}: No caption found.")
+                scene['summary'] = None
+                continue
+
+            # Wrap the single caption in a list to match the expected input format
+            captions_list = [original_caption]
+            
+            print(f"Processing scene {i+1}/{len(scenes)}...")
+            summary = get_qwen_text_summary(captions_list, args.summary_prompt)
+            scene['summary'] = summary
+        
+        output_file = args.summary_output if args.summary_output else "./scenes_with_summaries.json"
+        save_scenes_to_json(scenes, output_file)
+        print(f"Scene summaries generated and saved to {output_file}")
     else:
-        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, --find-keyframes, or --generate-captions.")
+        print("This is a placeholder for the main script. Use --extract-frames, --detect-scenes, --find-keyframes, --generate-captions, or --summarize-scenes.")
 
 if __name__ == "__main__":
     main()
