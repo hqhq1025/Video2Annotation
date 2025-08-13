@@ -34,10 +34,14 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python video2annotation.py /path/to/your/video.mp4
+# Extract frames at 1 frame per second (default)
+python src/video2annotation.py --extract-frames /path/to/your/video.mp4
+
+# (Future) Process video for full annotation pipeline
+# python src/video2annotation.py /path/to/your/video.mp4
 ```
 
-This will process the video, extract frames, generate annotations, and save the output to a JSON file.
+This will process the video, extract frames, and save the output frames to a directory.
 
 ## Output Format
 
