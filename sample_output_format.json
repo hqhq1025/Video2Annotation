@@ -1,0 +1,27 @@
+{
+  "video": "/path/to/your/video.mp4",
+  "images": [
+    "/path/to/extracted/frame_00000.jpg",
+    "/path/to/extracted/frame_00001.jpg",
+    // ... paths to all key frames extracted for annotation
+  ],
+  "conversations": [
+    {
+      "from": "human",
+      "value": "<image>"
+    },
+    {
+      "from": "gpt",
+      "value": "Description of the first scene corresponding to the first frame."
+    },
+    {
+      "from": "human",
+      "value": "<image>"
+    },
+    {
+      "from": "gpt",
+      "value": "Description of the second scene corresponding to the second frame."
+    }
+    // ... alternating 'human' and 'gpt' entries for each scene/frame
+  ]
+}
