@@ -275,6 +275,18 @@ def save_scenes_to_json(scenes, output_file):
         json.dump(scenes, f, indent=4)
     print(f"Scenes saved to {output_file}")
 
+def save_frame_captions_to_json(frame_captions, output_file):
+    """
+    Saves the dictionary of frame paths to captions to a JSON file.
+
+    Args:
+        frame_captions (dict): A dictionary mapping frame paths to captions.
+        output_file (str): Path to the output JSON file.
+    """
+    with open(output_file, 'w') as f:
+        json.dump(frame_captions, f, indent=4, ensure_ascii=False)
+    print(f"Frame captions saved to {output_file}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Video to Annotation Tool")
@@ -295,10 +307,12 @@ def main():
     # Argument for generating QwenVL captions
     parser.add_argument("--generate-captions", type=str, help="Path to the JSON file containing scenes with keyframe paths")
     parser.add_argument("--captions-output", type=str, help="Output JSON file with QwenVL captions (default: ./scenes_with_captions.json)")
+    parser.add_argument("--frame-captions-output", type=str, help="Output JSON file with frame path to caption mapping (default: ./frame_captions.json)")
     parser.add_argument("--caption-prompt", type=str, default="Describe this image in detail.", help="Prompt to use for QwenVL captioning (default: 'Describe this image in detail.')")
 
     # Argument for summarizing scenes using a text model
-    parser.add_argument("--summarize-scenes", type=str, help="Path to the JSON file containing scenes with captions to be summarized")
+    parser.add_argument("--summarize-scenes", type=str, help="Path to the JSON file containing scenes with keyframe paths")
+    parser.add_argument("--frame-captions", type=str, help="Path to the JSON file containing frame path to caption mapping")
     parser.add_argument("--summary-output", type=str, help="Output JSON file with summarized scenes (default: ./scenes_with_summaries.json)")
     parser.add_argument("--summary-prompt", type=str, help="Custom prompt for the text summarization model")
 
@@ -324,6 +338,9 @@ def main():
         save_scenes_to_json(scenes_with_keyframes, output_file)
         print(f"Keyframe paths added to scenes. Output saved to {output_file}")
     elif args.generate_captions:
+        if not args.frame_captions_output:
+             args.frame_captions_output = "./frame_captions.json"
+             
         try:
             with open(args.generate_captions, 'r') as f:
                 scenes = json.load(f)
@@ -335,21 +352,40 @@ def main():
             return
 
         print(f"Generating captions for {len(scenes)} scenes using QwenVL...")
+        frame_captions_dict = {}
+        scenes_with_captions = []
         for i, scene in enumerate(scenes):
             keyframe_path = scene.get('keyframe_path')
             if not keyframe_path or not os.path.exists(keyframe_path):
                 print(f"Skipping scene {i+1}: Keyframe not found at {keyframe_path}")
                 scene['caption'] = None
+                scenes_with_captions.append(scene)
                 continue
 
             print(f"Processing scene {i+1}/{len(scenes)}: {keyframe_path}")
             caption = get_qwenvl_caption(keyframe_path, args.caption_prompt)
-            scene['caption'] = caption
+            
+            # 1. Populate the frame_captions_dict
+            frame_captions_dict[keyframe_path] = caption
+            
+            # 2. Add caption to the scene object for the legacy output
+            scene_with_caption = scene.copy()
+            scene_with_caption['caption'] = caption
+            scenes_with_captions.append(scene_with_caption)
         
+        # Save the frame-level captions
+        save_frame_captions_to_json(frame_captions_dict, args.frame_captions_output)
+        print(f"Frame-level captions saved to {args.frame_captions_output}")
+        
+        # Save the legacy scene-level file with captions
         output_file = args.captions_output if args.captions_output else "./scenes_with_captions.json"
-        save_scenes_to_json(scenes, output_file)
-        print(f"Captions generated and saved to {output_file}")
+        save_scenes_to_json(scenes_with_captions, output_file)
+        print(f"(Legacy) Scenes with captions saved to {output_file}")
+
     elif args.summarize_scenes:
+        if not args.frame_captions:
+            print("Error: --frame-captions is required for --summarize-scenes.")
+            return
         try:
             with open(args.summarize_scenes, 'r') as f:
                 scenes = json.load(f)
@@ -359,15 +395,32 @@ def main():
         except json.JSONDecodeError:
             print(f"Error: Could not decode JSON from {args.summarize_scenes}")
             return
+            
+        try:
+            with open(args.frame_captions, 'r') as f:
+                frame_captions_dict = json.load(f)
+        except FileNotFoundError:
+            print(f"Error: Could not find frame captions file {args.frame_captions}")
+            return
+        except json.JSONDecodeError:
+            print(f"Error: Could not decode JSON from {args.frame_captions}")
+            return
 
         print(f"Summarizing captions for {len(scenes)} scenes using Qwen Text Model...")
         for i, scene in enumerate(scenes):
             # Get the list of captions for this scene.
-            # For now, we assume it's a single 'caption' field.
-            # In the future, this could be a list of 'captions'.
-            original_caption = scene.get('caption')
+            # For now, we assume it's a single 'keyframe_path'.
+            # In the future, this could be a list of 'keyframe_paths'.
+            keyframe_path = scene.get('keyframe_path')
+            if not keyframe_path:
+                print(f"Skipping scene {i+1}: No keyframe path found.")
+                scene['summary'] = None
+                continue
+
+            # Get the caption for the keyframe from the frame_captions_dict
+            original_caption = frame_captions_dict.get(keyframe_path)
             if not original_caption:
-                print(f"Skipping scene {i+1}: No caption found.")
+                print(f"Skipping scene {i+1}: No caption found for keyframe {keyframe_path}.")
                 scene['summary'] = None
                 continue
 
