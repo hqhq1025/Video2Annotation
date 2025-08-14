@@ -4,6 +4,7 @@ import base64
 from openai import OpenAI
 
 # Define the model to use as a constant
+# Use environment variable DASHSCOPE_API_KEY, with a placeholder if not set
 QWENVL_MODEL = "qwen-vl-plus" # Commonly available QwenVL model on DashScope
 
 def encode_image_to_base64(image_path):
@@ -46,8 +47,10 @@ def get_qwenvl_caption(image_path, prompt="Describe this image in detail."):
         return None
 
     # Initialize the OpenAI client for DashScope
+    # Prioritize environment variable, fallback to a placeholder (won't work without real key)
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "YOUR_DASHSCOPE_API_KEY_PLACEHOLDER")
     client = OpenAI(
-        api_key=os.environ.get("DASHSCOPE_API_KEY", "sk-07809ce5885f4fc3aefd07b0ca0e1e11"), # It's better to use environment variable
+        api_key=api_key,
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
