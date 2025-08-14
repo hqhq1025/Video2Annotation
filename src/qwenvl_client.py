@@ -25,13 +25,13 @@ def encode_image_to_base64(image_path):
         print(f"Error encoding image {image_path} to base64: {e}")
         return None
 
-def get_qwenvl_caption(image_path, prompt="Describe this image in detail."):
+def get_qwenvl_caption(image_path, prompt="Provide a clear and detailed description of the visual content in this image. Focus on objectively identifying and describing the key elements present, such as: objects, people, actions, setting, colors, and layout. Avoid storytelling, emotional language, or subjective interpretations. Be specific and concise. Example: 'A red car parked on a city street. A person in a blue jacket walking towards a building.'"):
     """
     Gets a caption for an image using QwenVL model via DashScope API.
 
     Args:
         image_path (str): Path to the image file.
-        prompt (str, optional): The prompt to send to the model. Defaults to "Describe this image in detail.".
+        prompt (str, optional): The prompt to send to the model.
 
     Returns:
         str: The generated caption, or None if an error occurred.
@@ -67,7 +67,7 @@ def get_qwenvl_caption(image_path, prompt="Describe this image in detail."):
                     ]
                 }
             ],
-            temperature=0.8 # Revert to earlier temperature
+            temperature=0.7 # Moderate temperature for balanced detail and relevance
         )
         # Check if the response is successful
         if completion.choices and completion.choices[0].message.content:
